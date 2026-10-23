@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Staff Attendance System</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- QR Code Generator -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans antialiased min-h-screen flex flex-col">
+
+    <!-- App Wrapper Container -->
+    <div id="app" class="max-w-md mx-auto w-full bg-white min-h-screen shadow-xl flex flex-col relative">
+        
+        <!-- Header -->
+        <header class="bg-indigo-600 text-white p-4 shadow-md flex justify-between items-center z-10">
+            <h1 class="text-base font-bold flex items-center gap-2">
+                <i class="fa-solid fa-clipboard-user"></i> Staff Attendance Portal
+            </h1>
+            <span id="currentTime" class="text-xs bg-indigo-700 px-2.5 py-1 rounded-full font-mono">--:--:--</span>
+        </header>
+
+        <!-- Main Content Area -->
+        <main class="flex-1 p-4 overflow-y-auto pb-24">
+
+            <!-- CHECK-IN VIEW (Default view when staff scans QR code) -->
+            <div id="checkinView" class="space-y-6">
+                <div class="text-center py-6 bg-indigo-50 rounded-2xl p-6 border border-indigo-100 shadow-sm">
+                    <div class="w-16 h-16 bg-indigo-600 text-white rounded-2xl flex items-center justify-center mx-auto mb-3 text-2xl shadow-md">
+                        <i class="fa-solid fa-qrcode"></i>
+                    </div>
+                    <h2 class="text-xl font-bold text-indigo-900">Master QR Check-In</h2>
+                    <p class="text-xs text-indigo-600 mt-1 px-4">Select your name below to instantly record your attendance with GPS coordinates.</p>
+                </div>
+
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Select Your Name</label>
+                        <select id="staffSelect" class="w-full p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white text-sm font-medium">
+                            <option value="">-- Choose Your Name --</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Attendance Status</label>
+                        <div class="grid grid-cols-2 gap-3">
+                            <button type="button" onclick="setCheckType('Check-IN')" id="btnCheckIn" class="p-3 rounded-xl font-semibold border-2 border-emerald-500 bg-emerald-50 text-emerald-700 transition flex items-center justify-center gap-2 text-sm shadow-xs">
+                                <i class="fa-solid fa-right-to-bracket"></i> Check-IN
+                            </button>
+                            <button type="button" onclick="setCheckType('Check-OUT')" id="btnCheckOut" class="p-3 rounded-xl font-semibold border-2 border-slate-200 bg-white text-slate-600 transition flex items-center justify-center gap-2 text-sm">
+                                <i class="fa-solid fa-right-from-bracket"></i> Check-OUT
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- GPS Status Box -->
+                    <div class="p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-600 flex items-center justify-between">
+                        <span id="gpsStatus" class="flex items-center gap-2 font-medium">
+                            <i class="fa-solid fa-location-dot text-indigo-600"></i> Acquiring GPS location...
+                        </span>
+                        <button onclick="fetchLocation()" class="text-indigo-600 font-bold underline hover:text-indigo-800">Refresh</button>
+                    </div>
+
+                    <button onclick="submitAttendance()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-indigo-200 transition flex items-center justify-center gap-2 text-sm">
+                        <i class="fa-solid fa-paper-plane"></i> Submit Attendance & Notify
+                    </button>
+                </div>
+            </div>
+
+            <!-- ADMIN / MANAGEMENT VIEW (Toggleable via bottom nav) -->
+            <div id="adminView" class="hidden space-y-4">
+                
+                <!-- Admin Tabs -->
+                <div class="flex border-b border-slate-200 text-xs bg-slate-100 p-1 rounded-xl">
+                    <button onclick="switchTab('qrTab')" id="tabQrBtn" class="flex-1 py-2 font-bold rounded-lg bg-white text-indigo-600 shadow-xs transition">Master QR</button>
+                    <button onclick="switchTab('logsTab')" id="tabLogsBtn" class="flex-1 py-2 font-medium text-slate-600 rounded-lg transition">Logs</button>
+                    <button onclick="switchTab('staffTab')" id="tabStaffBtn" class="flex-1 py-2 font-medium text-slate-600 rounded-lg transition">Staff</button>
+                    <button onclick="switchTab('settingsTab')" id="tabSettingsBtn" class="flex-1 py-2 font-medium text-slate-600 rounded-lg transition">Config</button>
+                </div>
+
+                <!-- QR Tab -->
+                <div id="qrTab" class="admin-section space-y-4">
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 text-center space-y-4">
+                        <h3 class="font-bold text-slate-800 text-base">Universal Master QR Code</h3>
+                        <p class="text-xs text-slate-500">Mount this QR code at your office entrance. Staff scan with any smartphone camera to check in instantly.</p>
+                        
+                        <div id="masterQrContainer" class="flex justify-center p-4 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-300 inline-block mx-auto"></div>
+                        
+                        <!-- Instant Test Simulation Button -->
+                        <div class="p-3 bg-amber-50 rounded-xl border border-amber-200 space-y-2">
+                            <p class="text-xs text-amber-800 font-medium">Testing on the same device? Simulate what staff see when they scan this QR code:</p>
+                            <button onclick="simulateScanQR()" class="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-2.5 rounded-xl text-xs transition shadow flex items-center justify-center gap-2">
+                                <i class="fa-solid fa-bolt"></i> Simulate QR Scan (Open Check-In)
+                            </button>
+                        </div>
+
+                        <button onclick="showCheckinView()" class="w-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold py-2.5 rounded-xl text-xs transition">
+                            Switch Back to Staff Check-In Screen
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Logs Tab -->
+                <div id="logsTab" class="admin-section hidden space-y-3">
+                    <div class="flex justify-between items-center">
+                        <h3 class="font-bold text-slate-800 text-sm">Attendance History</h3>
+                        <button onclick="exportCSV()" class="text-xs bg-indigo-50 text-indigo-600 border border-indigo-200 px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1">
+                            <i class="fa-solid fa-download"></i> Export CSV
+                        </button>
+                    </div>
+                    <div id="logsList" class="space-y-2"></div>
+                </div>
+
+                <!-- Staff Tab -->
+                <div id="staffTab" class="admin-section hidden space-y-3">
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 space-y-3">
+                        <h3 class="font-bold text-slate-800 text-xs uppercase tracking-wider">Add New Staff Member</h3>
+                        <input type="text" id="newStaffName" placeholder="Full Name (e.g., John Doe)" class="w-full p-3 border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-indigo-500 outline-none">
+                        <button onclick="addStaff()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-xl text-xs font-bold transition shadow">Add Staff</button>
+                    </div>
+                    <div id="staffList" class="space-y-2"></div>
+                </div>
+
+                <!-- Settings Tab -->
+                <div id="settingsTab" class="admin-section hidden space-y-3">
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 space-y-3">
+                        <h3 class="font-bold text-slate-800 text-xs uppercase tracking-wider">Telegram Bot Configuration</h3>
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Bot Token</label>
+                            <input type="text" id="botToken" value="8809930999:AAFTrha9z-45IvFtGdrryWDPkOTjxWo3XVM" class="w-full p-2.5 border rounded-xl text-xs font-mono bg-slate-50">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Telegram Chat ID / Group ID</label>
+                            <input type="text" id="chatId" placeholder="e.g. -100123456789 or @channelname" class="w-full p-2.5 border rounded-xl text-xs font-mono">
+                        </div>
+                        <button onclick="saveSettings()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl text-xs font-bold transition">Save Settings</button>
+                        <button onclick="testTelegram()" class="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 py-2.5 rounded-xl text-xs font-semibold transition">Test Telegram Alert</button>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+
+        <!-- Bottom Navigation Bar -->
+        <footer class="absolute bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-2.5 flex justify-around text-xs text-slate-600 shadow-lg z-20">
+            <button onclick="showCheckinView()" id="navCheckinBtn" class="flex flex-col items-center text-indigo-600 font-bold transition">
+                <i class="fa-solid fa-qrcode text-base mb-0.5"></i> Check-In
+            </button>
+            <button onclick="showAdminView()" id="navAdminBtn" class="flex flex-col items-center text-slate-600 hover:text-indigo-600 font-medium transition">
+                <i class="fa-solid fa-gauge text-base mb-0.5"></i> Admin Dashboard
+            </button>
+        </footer>
+
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-20 left-1/2 transform -translate-x-1/2 bg-slate-900 text-white px-4 py-2.5 rounded-2xl text-xs shadow-2xl hidden transition-all z-50 font-medium flex items-center gap-2"></div>
+
+    <!-- Core Script -->
+    <script>
+        let staffMembers = JSON.parse(localStorage.getItem('att_staff') || '["Horn Oudom", "Srey Leap", "Dara Smith", "Vicheka Chan"]');
+        let attendanceLogs = JSON.parse(localStorage.getItem('att_logs') || '[]');
+        let currentCheckType = 'Check-IN';
+        let currentLat = 11.5564;
+        let currentLng = 104.9282;
+
+        window.onload = function() {
+            setInterval(() => {
+                document.getElementById('currentTime').innerText = new Date().toLocaleTimeString();
+            }, 1000);
+
+            if(localStorage.getItem('att_token')) document.getElementById('botToken').value = localStorage.getItem('att_token');
+            if(localStorage.getItem('att_chatid')) document.getElementById('chatId').value = localStorage.getItem('att_chatid');
+
+            renderStaffDropdown();
+            renderStaffList();
+            renderLogs();
+            renderMasterQR();
+            fetchLocation();
+
+            // Check if URL has scan trigger
+            const urlParams = new URLSearchParams(window.location.search);
+            if(urlParams.get('scan') === 'true') {
+                showCheckinView();
+            }
+        };
+
+        function fetchLocation() {
+            const gpsStatus = document.getElementById('gpsStatus');
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        currentLat = position.coords.latitude;
+                        currentLng = position.coords.longitude;
+                        gpsStatus.innerHTML = `<i class="fa-solid fa-location-dot text-emerald-600"></i> GPS Locked (${currentLat.toFixed(4)}, ${currentLng.toFixed(4)})`;
+                    },
+                    (error) => {
+                        gpsStatus.innerHTML = `<i class="fa-solid fa-triangle-exclamation text-amber-500"></i> GPS Warning (Using Phnom Penh Default)`;
+                    },
+                    { enableHighAccuracy: true, timeout: 10000 }
+                );
+            }
+        }
+
+        function setCheckType(type) {
+            currentCheckType = type;
+            const btnIn = document.getElementById('btnCheckIn');
+            const btnOut = document.getElementById('btnCheckOut');
+            if(type === 'Check-IN') {
+                btnIn.className = "p-3 rounded-xl font-semibold border-2 border-emerald-500 bg-emerald-50 text-emerald-700 transition flex items-center justify-center gap-2 text-sm shadow-xs";
+                btnOut.className = "p-3 rounded-xl font-semibold border-2 border-slate-200 bg-white text-slate-600 transition flex items-center justify-center gap-2 text-sm";
+            } else {
+                btnIn.className = "p-3 rounded-xl font-semibold border-2 border-slate-200 bg-white text-slate-600 transition flex items-center justify-center gap-2 text-sm";
+                btnOut.className = "p-3 rounded-xl font-semibold border-2 border-rose-500 bg-rose-50 text-rose-700 transition flex items-center justify-center gap-2 text-sm shadow-xs";
+            }
+        }
+
+        function renderStaffDropdown() {
+            const select = document.getElementById('staffSelect');
+            select.innerHTML = '<option value="">-- Choose Your Name --</option>' + 
+                staffMembers.map(name => `<option value="${name}">${name}</option>`).join('');
+        }
+
+        function submitAttendance() {
+            const name = document.getElementById('staffSelect').value;
+            if(!name) {
+                showToast("Please select your staff name!");
+                return;
+            }
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString();
+            const dateStr = now.toLocaleDateString();
+            const mapLink = `https://maps.google.com/?q=${currentLat},${currentLng}`;
+            
+            const record = {
+                name,
+                type: currentCheckType,
+                time: `${dateStr} ${timeStr}`,
+                lat: currentLat,
+                lng: currentLng,
+                mapLink
+            };
+
+            attendanceLogs.unshift(record);
+            localStorage.setItem('att_logs', JSON.stringify(attendanceLogs));
+
+            sendTelegramAlert(record);
+            showToast(`Success! ${currentCheckType} recorded for ${name}`);
+            document.getElementById('staffSelect').value = '';
+            renderLogs();
+        }
+
+        function sendTelegramAlert(record) {
+            const token = document.getElementById('botToken').value || '8809930999:AAFTrha9z-45IvFtGdrryWDPkOTjxWo3XVM';
+            const chatId = document.getElementById('chatId').value;
+            if(!chatId) return;
+
+            const icon = record.type === 'Check-IN' ? '🟢' : '🔴';
+            const text = `${icon} *Staff Attendance Alert*\n\n*Name:* ${record.name}\n*Action:* ${record.type}\n*Time:* ${record.time}\n*Location:* [Google Maps Link](${record.mapLink})`;
+
+            fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    chat_id: chatId,
+                    text: text,
+                    parse_mode: 'Markdown'
+                })
+            }).catch(e => console.error(e));
+        }
+
+        function showCheckinView() {
+            document.getElementById('checkinView').classList.remove('hidden');
+            document.getElementById('adminView').classList.add('hidden');
+            document.getElementById('navCheckinBtn').className = "flex flex-col items-center text-indigo-600 font-bold transition";
+            document.getElementById('navAdminBtn').className = "flex flex-col items-center text-slate-600 hover:text-indigo-600 font-medium transition";
+            fetchLocation();
+        }
+
+        function showAdminView() {
+            document.getElementById('checkinView').classList.add('hidden');
+            document.getElementById('adminView').classList.remove('hidden');
+            document.getElementById('navCheckinBtn').className = "flex flex-col items-center text-slate-600 hover:text-indigo-600 font-medium transition";
+            document.getElementById('navAdminBtn').className = "flex flex-col items-center text-indigo-600 font-bold transition";
+            renderMasterQR();
+            renderLogs();
+            renderStaffList();
+        }
+
+        function simulateScanQR() {
+            showToast("QR Scanned Successfully! Opening Check-In...");
+            setTimeout(() => {
+                showCheckinView();
+            }, 600);
+        }
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.admin-section').forEach(el => el.classList.add('hidden'));
+            document.getElementById(tabId).classList.remove('hidden');
+            
+            ['tabQrBtn', 'tabLogsBtn', 'tabStaffBtn', 'tabSettingsBtn'].forEach(btn => {
+                const el = document.getElementById(btn);
+                el.className = "flex-1 py-2 font-medium text-slate-600 rounded-lg transition";
+            });
+            const activeBtnMap = {'qrTab': 'tabQrBtn', 'logsTab': 'tabLogsBtn', 'staffTab': 'tabStaffBtn', 'settingsTab': 'tabSettingsBtn'};
+            const activeBtn = document.getElementById(activeBtnMap[tabId]);
+            activeBtn.className = "flex-1 py-2 font-bold rounded-lg bg-white text-indigo-600 shadow-xs transition";
+        }
+
+        function renderMasterQR() {
+            const container = document.getElementById('masterQrContainer');
+            container.innerHTML = '';
+            try {
+                const scanUrl = window.location.href.split('?')[0] + '?scan=true';
+                const qr = qrcode(0, 'M');
+                qr.addData(scanUrl);
+                qr.make();
+                container.innerHTML = qr.createSvgTag({cellSize: 6, margin: 2});
+            } catch(e) {
+                container.innerHTML = '<p class="text-xs text-rose-500">QR Generation Error</p>';
+            }
+        }
+
+        function renderLogs() {
+            const list = document.getElementById('logsList');
+            if(attendanceLogs.length === 0) {
+                list.innerHTML = '<p class="text-xs text-slate-400 text-center py-8">No attendance records found yet.</p>';
+                return;
+            }
+            list.innerHTML = attendanceLogs.map(l => `
+                <div class="bg-white p-3.5 rounded-xl border border-slate-100 shadow-xs flex justify-between items-center text-xs">
+                    <div>
+                        <div class="font-bold text-slate-800">${l.name} <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${l.type === 'Check-IN' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}">${l.type}</span></div>
+                        <div class="text-slate-500 mt-0.5 font-mono">${l.time}</div>
+                    </div>
+                    <a href="${l.mapLink}" target="_blank" class="text-indigo-600 font-bold underline flex items-center gap-1"><i class="fa-solid fa-map-pin"></i> Map</a>
+                </div>
+            `).join('');
+        }
+
+        function renderStaffList() {
+            const list = document.getElementById('staffList');
+            list.innerHTML = staffMembers.map((s, idx) => `
+                <div class="bg-white p-3 rounded-xl border border-slate-100 flex justify-between items-center text-xs">
+                    <span class="font-semibold text-slate-800">${s}</span>
+                    <button onclick="removeStaff(${idx})" class="text-rose-500 hover:text-rose-700 p-1"><i class="fa-solid fa-trash"></i></button>
+                </div>
+            `).join('');
+        }
+
+        function addStaff() {
+            const nameInput = document.getElementById('newStaffName');
+            const name = nameInput.value.trim();
+            if(!name) return;
+            staffMembers.push(name);
+            localStorage.setItem('att_staff', JSON.stringify(staffMembers));
+            nameInput.value = '';
+            renderStaffDropdown();
+            renderStaffList();
+            showToast("Staff member added successfully!");
+        }
+
+        function removeStaff(idx) {
+            staffMembers.splice(idx, 1);
+            localStorage.setItem('att_staff', JSON.stringify(staffMembers));
+            renderStaffDropdown();
+            renderStaffList();
+            showToast("Staff member removed.");
+        }
+
+        function saveSettings() {
+            localStorage.setItem('att_token', document.getElementById('botToken').value);
+            localStorage.setItem('att_chatid', document.getElementById('chatId').value);
+            showToast("Telegram configuration saved!");
+        }
+
+        function testTelegram() {
+            const token = document.getElementById('botToken').value;
+            const chatId = document.getElementById('chatId').value;
+            if(!chatId) {
+                showToast("Please enter Telegram Chat ID first!");
+                return;
+            }
+            fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    chat_id: chatId,
+                    text: "🔔 *Staff Attendance System Connected Successfully!*",
+                    parse_mode: 'Markdown'
+                })
+            }).then(res => {
+                if(res.ok) showToast("Test alert sent successfully to Telegram!");
+                else showToast("Failed. Verify Bot Token & Chat ID.");
+            }).catch(e => showToast("Network error testing Telegram API."));
+        }
+
+        function exportCSV() {
+            let csv = "Name,Type,Timestamp,Latitude,Longitude,GoogleMaps\n";
+            attendanceLogs.forEach(l => {
+                csv += `"${l.name}","${l.type}","${l.time}",${l.lat},${l.lng},"${l.mapLink}"\n`;
+            });
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.setAttribute('href', url);
+            a.setAttribute('download', 'staff_attendance_logs.csv');
+            a.click();
+            showToast("CSV exported successfully!");
+        }
+
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-400"></i> <span>${msg}</span>`;
+            t.classList.remove('hidden');
+            setTimeout(() => t.classList.add('hidden'), 3500);
+        }
+    </script>
+</body>
+</html>
